@@ -1,8 +1,11 @@
-mode: ${MODE}
-
 server:
   host: ${SERVER_HOST}
   port: ${SERVER_PORT}
+  tls:
+    mode: ${SERVER_TLS_MODE}
+    ca: ${SERVER_TLS_CA}
+    cert: ${SERVER_TLS_CERT}
+    key: ${SERVER_TLS_KEY}
 
 database:
   host: ${DATABASE_HOST}

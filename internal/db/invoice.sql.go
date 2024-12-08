@@ -149,44 +149,6 @@ func (q *Queries) ExpireInvoiceById(ctx context.Context, id pgtype.UUID) (Invoic
 	return i, err
 }
 
-const findAllInvoicesByIds = `-- name: FindAllInvoicesByIds :many
-SELECT id, crypto_address, coin, required_amount, actual_amount, confirmations_required, created_at, confirmed_at, status, expires_at, tx_id, user_id FROM invoices
-WHERE id = ANY($1::uuid[])
-`
-
-func (q *Queries) FindAllInvoicesByIds(ctx context.Context, dollar_1 []pgtype.UUID) ([]Invoice, error) {
-	rows, err := q.db.Query(ctx, findAllInvoicesByIds, dollar_1)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Invoice
-	for rows.Next() {
-		var i Invoice
-		if err := rows.Scan(
-			&i.ID,
-			&i.CryptoAddress,
-			&i.Coin,
-			&i.RequiredAmount,
-			&i.ActualAmount,
-			&i.ConfirmationsRequired,
-			&i.CreatedAt,
-			&i.ConfirmedAt,
-			&i.Status,
-			&i.ExpiresAt,
-			&i.TxID,
-			&i.UserID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const findAllPendingInvoices = `-- name: FindAllPendingInvoices :many
 SELECT id, crypto_address, coin, required_amount, actual_amount, confirmations_required, created_at, confirmed_at, status, expires_at, tx_id, user_id FROM invoices
 WHERE status IN ('PENDING', 'PENDING_MEMPOOL')

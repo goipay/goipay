@@ -10,9 +10,6 @@ VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 
--- name: FindAllInvoicesByIds :many
-SELECT * FROM invoices
-WHERE id = ANY($1::uuid[]);
 -- name: FindAllPendingInvoices :many
 SELECT * FROM invoices
 WHERE status IN ('PENDING', 'PENDING_MEMPOOL');

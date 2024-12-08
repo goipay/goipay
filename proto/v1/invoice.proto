@@ -40,15 +40,6 @@ message CreateInvoiceResponse {
     string address = 2;
 }
 
-// Deprecated
-message GetInvoicesRequest {
-    repeated string paymentIds = 1 [deprecated = true];
-}
-// Deprecated
-message GetInvoicesResponse {
-    repeated Invoice invoices = 1 [deprecated = true];
-}
-
 message InvoiceStatusStreamRequest{}
 message InvoiceStatusStreamResponse {
     Invoice invoice = 1;
@@ -56,8 +47,5 @@ message InvoiceStatusStreamResponse {
 
 service InvoiceService {
     rpc CreateInvoice(CreateInvoiceRequest) returns (CreateInvoiceResponse);
-    rpc GetInvoices(GetInvoicesRequest) returns (GetInvoicesResponse) {
-        option deprecated = true;
-    };
     rpc InvoiceStatusStream(InvoiceStatusStreamRequest) returns (stream InvoiceStatusStreamResponse);
 }

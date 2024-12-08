@@ -13,6 +13,7 @@ import (
 	"github.com/chekist32/goipay/internal/listener"
 	"github.com/chekist32/goipay/internal/util"
 	"github.com/chekist32/goipay/test"
+	db_test "github.com/chekist32/goipay/test/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -35,6 +36,53 @@ func createNewTestBaseCryptoProcessor() (chan db.Invoice, *baseCryptoProcessor, 
 		},
 		postgres,
 		close
+}
+
+func TestBroadcastInvoice(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Should Receive The Invoice", func(t *testing.T) {
+		ctx := context.Background()
+
+		invoiceCn, p, _, close := createNewTestBaseCryptoProcessor()
+		defer close(ctx)
+
+		q := db.New(p.dbConnPool)
+		userId, err := q.CreateUser(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		expectedAddr, err := q.CreateCryptoAddress(ctx, db.CreateCryptoAddressParams{
+			Address:    uuid.NewString(),
+			Coin:       db.CoinTypeXMR,
+			IsOccupied: true,
+			UserID:     userId,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var expiresAt pgtype.Timestamptz
+		if err := expiresAt.Scan(time.Now().UTC()); err != nil {
+			log.Fatal(err)
+		}
+		invoice, err := q.CreateInvoice(ctx, db.CreateInvoiceParams{
+			CryptoAddress:         expectedAddr.Address,
+			Coin:                  expectedAddr.Coin,
+			RequiredAmount:        1.0,
+			ConfirmationsRequired: 0,
+			ExpiresAt:             expiresAt,
+			UserID:                userId,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		p.broadcastUpdatedInvoice(ctx, &invoice)
+		receivedInvoice := test.GetValueFromCnOrLogFatalWithTimeout(invoiceCn, listener.MIN_SYNC_TIMEOUT, "Timeout expired")
+
+		assert.Equal(t, invoice, receivedInvoice)
+	})
 }
 
 func TestReleaseAddressHelper(t *testing.T) {
@@ -98,6 +146,7 @@ func TestExpireInvoice(t *testing.T) {
 		defer close(ctx)
 
 		q := db.New(p.dbConnPool)
+		qTest := db_test.New(p.dbConnPool)
 		userId, err := q.CreateUser(ctx)
 		if err != nil {
 			log.Fatal(err)
@@ -148,10 +197,7 @@ func TestExpireInvoice(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, expectedAddr, addr)
 
-		invocies, err := q.FindAllInvoicesByIds(ctx, []pgtype.UUID{expectedPendingInvoice.ID})
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(invocies))
-		expiredInvoice = invocies[0]
+		expiredInvoice = getInvoiceOrFatal(ctx, qTest, &expectedPendingInvoice.ID)
 		assert.Equal(t, expectedPendingInvoice.ID, expiredInvoice.ID)
 		assert.Equal(t, db.InvoiceStatusTypeEXPIRED, expiredInvoice.Status)
 		assert.False(t, expiredInvoice.ConfirmedAt.Valid)
@@ -168,6 +214,7 @@ func TestConfirmInvoice(t *testing.T) {
 		defer close(ctx)
 
 		q := db.New(p.dbConnPool)
+		qTest := db_test.New(p.dbConnPool)
 		userId, err := q.CreateUser(ctx)
 		if err != nil {
 			log.Fatal(err)
@@ -203,11 +250,7 @@ func TestConfirmInvoice(t *testing.T) {
 
 		p.confirmInvoice(ctx, &expectedPendingInvoice)
 
-		invocies, err := q.FindAllInvoicesByIds(ctx, []pgtype.UUID{expectedPendingInvoice.ID})
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(invocies))
-		confirmedInvoice := invocies[0]
-		assert.NoError(t, err)
+		confirmedInvoice := getInvoiceOrFatal(ctx, qTest, &expectedPendingInvoice.ID)
 		assert.Equal(t, expectedPendingInvoice.ID, confirmedInvoice.ID)
 		assert.Equal(t, db.InvoiceStatusTypeCONFIRMED, confirmedInvoice.Status)
 		assert.NotNil(t, confirmedInvoice.ConfirmedAt)
@@ -251,6 +294,7 @@ func TestHandleInvoice(t *testing.T) {
 		defer close(ctx)
 
 		q := db.New(p.dbConnPool)
+		qTest := db_test.New(p.dbConnPool)
 		userId, err := q.CreateUser(ctx)
 		if err != nil {
 			log.Fatal(err)
@@ -293,10 +337,7 @@ func TestHandleInvoice(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, expectedAddr, addr)
 
-		invocies, err := q.FindAllInvoicesByIds(ctx, []pgtype.UUID{expectedPendingInvoice.ID})
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(invocies))
-		expiredInvoice := invocies[0]
+		expiredInvoice := getInvoiceOrFatal(ctx, qTest, &expectedPendingInvoice.ID)
 		assert.Equal(t, expectedPendingInvoice.ID, expiredInvoice.ID)
 		assert.Equal(t, db.InvoiceStatusTypeEXPIRED, expiredInvoice.Status)
 		assert.False(t, expiredInvoice.ConfirmedAt.Valid)
@@ -309,6 +350,7 @@ func TestHandleInvoice(t *testing.T) {
 		defer close(ctx)
 
 		q := db.New(p.dbConnPool)
+		qTest := db_test.New(p.dbConnPool)
 		userId, err := q.CreateUser(ctx)
 		if err != nil {
 			log.Fatal(err)
@@ -350,10 +392,7 @@ func TestHandleInvoice(t *testing.T) {
 		_, err = q.FindNonOccupiedCryptoAddressAndLockByUserIdAndCoin(ctx, db.FindNonOccupiedCryptoAddressAndLockByUserIdAndCoinParams{UserID: expectedPendingInvoice.UserID, Coin: expectedPendingInvoice.Coin})
 		assert.ErrorIs(t, err, pgx.ErrNoRows)
 
-		invocies, err := q.FindAllInvoicesByIds(ctx, []pgtype.UUID{expectedPendingInvoice.ID})
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(invocies))
-		pendingInvoice := invocies[0]
+		pendingInvoice := getInvoiceOrFatal(ctx, qTest, &expectedPendingInvoice.ID)
 		assert.Equal(t, expectedPendingInvoice, pendingInvoice)
 	})
 }

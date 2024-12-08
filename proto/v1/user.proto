@@ -17,20 +17,8 @@ message UpdateCryptoKeysRequest {
 }
 message UpdateCryptoKeysResponse {}
 
-// Deprecated
-message GetCryptoKeysRequest {
-    string userId = 1 [deprecated = true];
-}
-// Deprecated
-message GetCryptoKeysResponse {
-    optional crypto.v1.XmrKeys xmrKeys = 1 [deprecated = true];
-}
-
 service UserService {
     rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
     rpc UpdateCryptoKeys(UpdateCryptoKeysRequest) returns (UpdateCryptoKeysResponse);
-    rpc GetCryptoKeys(GetCryptoKeysRequest) returns (GetCryptoKeysResponse) {
-        option deprecated = true;
-    };
 }
 

@@ -31,3 +31,6 @@ build-debug:
 
 coverage:
 	go test -coverprofile=.coverage.out -coverpkg=./internal/handler,./internal/listener,./internal/processor,./internal/util,./internal/db ./... && go tool cover -html=.coverage.out -o .coverage.html
+
+gen-certs:
+	rm -rf ./certs/* && bash -x ./script/generate_certs.sh

@@ -79,33 +79,30 @@ func (p *xmrProcessor) verifyMoneroTxOnTxMempool(ctx context.Context, xmrTx inco
 				p.log.Err(err).Msg(util.DefaultFailedSqlTxInitMsg)
 				return
 			}
+			defer tx.Rollback(ctx)
 
 			invoice := value.invoice.Load()
 
 			cryptoData, err := q.FindCryptoDataByUserId(ctx, invoice.UserID)
 			if err != nil {
-				tx.Rollback(ctx)
 				p.log.Err(err).Str("queryName", "FindCryptoDataByUserId").Msg(util.DefaultFailedSqlQueryMsg)
 				return
 			}
 
 			xmrKeys, err := q.FindKeysAndLockXMRCryptoDataById(ctx, cryptoData.XmrID)
 			if err != nil {
-				tx.Rollback(ctx)
 				p.log.Err(err).Str("queryName", "FindKeysAndLockXMRCryptoDataById").Msg(util.DefaultFailedSqlQueryMsg)
 				return
 			}
 
 			privView, err := utils.NewPrivateKey(xmrKeys.PrivViewKey)
 			if err != nil {
-				tx.Rollback(ctx)
 				p.log.Err(err).Msg("An error occurred while creating the XMR private view key.")
 				return
 			}
 
 			addr, err := utils.NewAddress(invoice.CryptoAddress)
 			if err != nil {
-				tx.Rollback(ctx)
 				p.log.Err(err).Msg("An error occurred while generating a new XMR subaddress.")
 				return
 			}
@@ -113,7 +110,6 @@ func (p *xmrProcessor) verifyMoneroTxOnTxMempool(ctx context.Context, xmrTx inco
 
 			txPub, err := utils.GetTxPublicKeyFromExtra(txInfo.Extra)
 			if err != nil {
-				tx.Rollback(ctx)
 				p.log.Err(err).Msg("An error occurred while extracting the tx public key from the extra field.")
 				return
 			}
@@ -128,14 +124,12 @@ func (p *xmrProcessor) verifyMoneroTxOnTxMempool(ctx context.Context, xmrTx inco
 
 					outKey, err := utils.NewPublicKey(out.Target.TaggedKey.Key)
 					if err != nil {
-						tx.Rollback(ctx)
 						p.log.Err(err).Msg("An error occurred while creating the XMR tx outKey.")
 						return
 					}
 
 					res, am, err := utils.DecryptOutputPublicSpendKey(pubSpend, uint32(i), outKey, ecdh.Amount, txPub, privView)
 					if err != nil {
-						tx.Rollback(ctx)
 						p.log.Err(err).Msg("An error occurred while decrypting the XMR tx output.")
 						return
 					}
@@ -147,21 +141,18 @@ func (p *xmrProcessor) verifyMoneroTxOnTxMempool(ctx context.Context, xmrTx inco
 
 					var txId pgtype.Text
 					if err := txId.Scan(xmrTx.txId()); err != nil {
-						tx.Rollback(ctx)
 						p.log.Err(err).Str("fieldName", "txId").Msg(util.DefaultFailedScanningToPostgresqlDataTypeMsg)
 						return
 					}
 
 					var amount pgtype.Float8
 					if err := amount.Scan(utils.XMRToFloat64(am)); err != nil {
-						tx.Rollback(ctx)
 						p.log.Err(err).Str("fieldName", "amount").Msg(util.DefaultFailedScanningToPostgresqlDataTypeMsg)
 						return
 					}
 
 					invoice, err := q.ConfirmInvoiceStatusMempoolById(ctx, db.ConfirmInvoiceStatusMempoolByIdParams{ID: value.invoice.Load().ID, ActualAmount: amount, TxID: txId})
 					if err != nil {
-						tx.Rollback(ctx)
 						p.log.Err(err).Str("queryName", "ConfirmInvoiceStatusMempoolById").Msg(util.DefaultFailedSqlQueryMsg)
 						return
 					}
@@ -169,11 +160,12 @@ func (p *xmrProcessor) verifyMoneroTxOnTxMempool(ctx context.Context, xmrTx inco
 					value.invoice.Store(&invoice)
 				}
 			}
+
 			tx.Commit(ctx)
 
 			invoice = value.invoice.Load()
 			if invoice.Status != db.InvoiceStatusTypePENDING {
-				p.invoiceCn <- *invoice
+				p.broadcastUpdatedInvoice(ctx, invoice)
 				p.confirmInvoiceHelper(ctx, value)
 			}
 		}()
@@ -213,8 +205,7 @@ func (p *xmrProcessor) confirmInvoiceHelper(ctx context.Context, value pendingIn
 	}
 
 	go p.releaseAddressHelper(ctx, invoice)
-
-	p.invoiceCn <- *confirmedInvoice
+	p.broadcastUpdatedInvoice(ctx, confirmedInvoice)
 }
 
 func (p *xmrProcessor) verifyMoneroTxOnNewBlock(ctx context.Context) {
@@ -235,17 +226,16 @@ func (p *xmrProcessor) load(ctx context.Context) error {
 		p.log.Err(err).Msg(util.DefaultFailedSqlTxInitMsg)
 		return err
 	}
+	defer tx.Rollback(ctx)
 
 	cache, err := q.FindCryptoCacheByCoin(ctx, db.CoinTypeXMR)
 	if err != nil {
-		tx.Rollback(ctx)
 		p.log.Err(err).Str("queryName", "FindCryptoCacheByCoin").Msg(util.DefaultFailedSqlQueryMsg)
 		return err
 	}
 
 	res, err := p.daemon.GetLastBlockHeader(false)
 	if err != nil {
-		tx.Rollback(ctx)
 		p.log.Err(err).Str("method", "get_last_block_header").Msg(util.DefaultFailedFetchingXMRDaemonMsg)
 		return err
 	}
@@ -255,48 +245,53 @@ func (p *xmrProcessor) load(ctx context.Context) error {
 		height = cache.LastSyncedBlockHeight.Int64
 	}
 
+	tx.Commit(ctx)
+
 	go func() {
-		go func() {
-			txPoolCn := p.daemonEx.NewTxPoolChan()
+		blockCn := p.daemonEx.NewBlockChan()
 
-			for {
-				select {
-				case res := <-txPoolCn:
-					go p.verifyMoneroTxOnTxMempool(ctx, incomingMoneroTxTxPool(res))
-				case <-ctx.Done():
-					return
-				}
+		for {
+			select {
+			case res := <-blockCn:
+				go func() {
+					txsRes, err := p.daemon.GetTransactions(res.BlockDetails.TxHashes, true, false, false)
+					if err != nil {
+						p.log.Err(err).Str("method", "get_transactions").Msg(util.DefaultFailedFetchingXMRDaemonMsg)
+						return
+					}
+
+					for i := 0; i < len(txsRes.Txs); i++ {
+						go p.verifyMoneroTxOnTxMempool(ctx, incomingMoneroTxGetTx(txsRes.Txs[i]))
+					}
+
+				}()
+
+				go p.verifyMoneroTxOnNewBlock(ctx)
+
+			case <-ctx.Done():
+				return
 			}
-		}()
+		}
+	}()
 
-		go func() {
-			blockCn := p.daemonEx.NewBlockChan()
+	go func() {
+		txPoolCn := p.daemonEx.NewTxPoolChan()
 
-			for {
-				select {
-				case res := <-blockCn:
-					go func() {
-						txsRes, err := p.daemon.GetTransactions(res.BlockDetails.TxHashes, true, false, false)
-						if err != nil {
-							p.log.Err(err).Str("method", "get_transactions").Msg(util.DefaultFailedFetchingXMRDaemonMsg)
-							return
-						}
-
-						for i := 0; i < len(txsRes.Txs); i++ {
-							go p.verifyMoneroTxOnTxMempool(ctx, incomingMoneroTxGetTx(txsRes.Txs[i]))
-						}
-
-					}()
-
-					go p.verifyMoneroTxOnNewBlock(ctx)
-
-				case <-ctx.Done():
-					return
-				}
+		for {
+			select {
+			case res := <-txPoolCn:
+				go p.verifyMoneroTxOnTxMempool(ctx, incomingMoneroTxTxPool(res))
+			case <-ctx.Done():
+				return
 			}
-		}()
+		}
+	}()
 
+	p.daemonEx.Start(uint64(height))
+
+	go func() {
 		p.persistCryptoCache(ctx)
+
 		for {
 			select {
 			case <-time.After(persist_cache_timeout):
@@ -307,10 +302,58 @@ func (p *xmrProcessor) load(ctx context.Context) error {
 		}
 	}()
 
-	tx.Commit(ctx)
-
-	p.daemonEx.Start(uint64(height))
 	return nil
+}
+
+func (p *xmrProcessor) generateNextXmrAddressHelper(ctx context.Context, q *db.Queries, userId pgtype.UUID) (db.CryptoAddress, error) {
+	var addr db.CryptoAddress
+
+	cd, err := q.FindCryptoDataByUserId(ctx, userId)
+	if err != nil {
+		return addr, err
+	}
+
+	indices, err := q.FindIndicesAndLockXMRCryptoDataById(ctx, cd.XmrID)
+	if err != nil {
+		return addr, err
+	}
+
+	keys, err := q.FindKeysAndLockXMRCryptoDataById(ctx, cd.XmrID)
+	if err != nil {
+		return addr, err
+	}
+
+	viewKey, err := utils.NewPrivateKey(keys.PrivViewKey)
+	if err != nil {
+		return addr, err
+	}
+
+	spendKey, err := utils.NewPublicKey(keys.PubSpendKey)
+	if err != nil {
+		return addr, err
+	}
+
+	indices.LastMinorIndex++
+	if indices.LastMinorIndex <= 0 {
+		indices.LastMinorIndex = 0
+		indices.LastMajorIndex++
+	}
+
+	subAddr, err := utils.GenerateSubaddress(viewKey, spendKey, uint32(indices.LastMajorIndex), uint32(indices.LastMinorIndex), p.network)
+	if err != nil {
+		return addr, err
+	}
+
+	addr, err = q.CreateCryptoAddress(ctx, db.CreateCryptoAddressParams{Address: subAddr.Address(), Coin: db.CoinTypeXMR, IsOccupied: true, UserID: userId})
+	if err != nil {
+		return addr, err
+	}
+
+	if _, err := q.UpdateIndicesXMRCryptoDataById(ctx, db.UpdateIndicesXMRCryptoDataByIdParams{ID: cd.XmrID, LastMajorIndex: indices.LastMajorIndex, LastMinorIndex: indices.LastMinorIndex}); err != nil {
+		return addr, err
+	}
+
+	return addr, nil
 }
 
 func (p *xmrProcessor) createInvoice(ctx context.Context, req *dto.NewInvoiceRequest) (*db.Invoice, error) {
@@ -319,10 +362,10 @@ func (p *xmrProcessor) createInvoice(ctx context.Context, req *dto.NewInvoiceReq
 		p.log.Err(err).Msg(util.DefaultFailedSqlTxInitMsg)
 		return nil, err
 	}
+	defer tx.Rollback(ctx)
 
 	var userId pgtype.UUID
 	if err := userId.Scan(req.UserId); err != nil {
-		tx.Rollback(ctx)
 		return nil, err
 	}
 
@@ -335,66 +378,17 @@ func (p *xmrProcessor) createInvoice(ctx context.Context, req *dto.NewInvoiceReq
 
 	var expiresAt pgtype.Timestamptz
 	if err := expiresAt.Scan(time.Now().UTC().Add(timeout)); err != nil {
-		tx.Rollback(ctx)
 		return nil, err
 	}
 
 	addr, err := q.FindNonOccupiedCryptoAddressAndLockByUserIdAndCoin(ctx, db.FindNonOccupiedCryptoAddressAndLockByUserIdAndCoinParams{UserID: userId, Coin: coin})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			tx.Rollback(ctx)
 			return nil, err
 		}
 
-		cd, err := q.FindCryptoDataByUserId(ctx, userId)
+		addr, err = p.generateNextXmrAddressHelper(ctx, q, userId)
 		if err != nil {
-			tx.Rollback(ctx)
-			return nil, err
-		}
-
-		indices, err := q.FindIndicesAndLockXMRCryptoDataById(ctx, cd.XmrID)
-		if err != nil {
-			tx.Rollback(ctx)
-			return nil, err
-		}
-
-		keys, err := q.FindKeysAndLockXMRCryptoDataById(ctx, cd.XmrID)
-		if err != nil {
-			tx.Rollback(ctx)
-			return nil, err
-		}
-
-		viewKey, err := utils.NewPrivateKey(keys.PrivViewKey)
-		if err != nil {
-			tx.Rollback(ctx)
-			return nil, err
-		}
-
-		spendKey, err := utils.NewPublicKey(keys.PubSpendKey)
-		if err != nil {
-			tx.Rollback(ctx)
-			return nil, err
-		}
-
-		indices.LastMinorIndex++
-		if indices.LastMinorIndex == 0 {
-			indices.LastMajorIndex++
-		}
-
-		subAddr, err := utils.GenerateSubaddress(viewKey, spendKey, uint32(indices.LastMajorIndex), uint32(indices.LastMinorIndex), p.network)
-		if err != nil {
-			tx.Rollback(ctx)
-			return nil, err
-		}
-
-		addr, err = q.CreateCryptoAddress(ctx, db.CreateCryptoAddressParams{Address: subAddr.Address(), Coin: db.CoinTypeXMR, IsOccupied: true, UserID: userId})
-		if err != nil {
-			tx.Rollback(ctx)
-			return nil, err
-		}
-
-		if _, err := q.UpdateIndicesXMRCryptoDataById(ctx, db.UpdateIndicesXMRCryptoDataByIdParams{ID: cd.XmrID, LastMajorIndex: indices.LastMajorIndex, LastMinorIndex: indices.LastMinorIndex}); err != nil {
-			tx.Rollback(ctx)
 			return nil, err
 		}
 	}
@@ -411,7 +405,6 @@ func (p *xmrProcessor) createInvoice(ctx context.Context, req *dto.NewInvoiceReq
 		},
 	)
 	if err != nil {
-		tx.Rollback(ctx)
 		p.log.Err(err).Str("queryName", "CreateInvoice").Msg(util.DefaultFailedSqlQueryMsg)
 		return nil, err
 	}
@@ -428,9 +421,7 @@ func (p *xmrProcessor) handleInvoicePbReq(ctx context.Context, req *dto.NewInvoi
 	}
 
 	p.handleInvoice(ctx, *invoice)
-	go func() {
-		p.invoiceCn <- *invoice
-	}()
+	p.broadcastUpdatedInvoice(ctx, invoice)
 
 	return invoice, nil
 }
@@ -462,13 +453,9 @@ func newXmrProcessor(dbConnPool *pgxpool.Pool, invoiceCn chan<- db.Invoice, c *d
 				invoiceCn:       invoiceCn,
 				pendingInvoices: new(util.SyncMapTypeSafe[string, pendingInvoice]),
 			},
-			// log:             log,
-			// dbConnPool:      dbConnPool,
 			daemon:   d,
 			daemonEx: listener.NewDaemonRpcClientExecutor(d, log),
 			network:  net,
-			// invoiceCn:       invoiceCn,
-			// pendingInvoices: new(util.SyncMapTypeSafe[string, pendingInvoice]),
 		},
 		nil
 }

@@ -27,12 +27,11 @@ services:
         condition: service_healthy
 
   backend-processor:
-    build:
-      context: .
-      dockerfile: ./Dockerfile
+    image: chekist32/goipay:latest
     env_file:
-      - ./.env.docker
+      - ./.env
     depends_on:
-      - migrations
+      migrations:
+        condition: service_completed_successfully
     ports:
       - "3000:3000"

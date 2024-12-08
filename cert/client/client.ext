@@ -1,0 +1,26 @@
+[ req ]
+default_bits       = 2048
+default_keyfile    = client.key
+default_md         = sha256
+prompt             = no
+distinguished_name = req_distinguished_name
+x509_extensions    = v3_req
+ 
+[ req_distinguished_name ]
+C                  = US
+ST                 = Test Cape
+L                  = Test Town
+O                  = Goipay
+OU                 = Finance
+CN                 = goipay.github.io
+ 
+[ v3_req ]
+keyUsage           = keyEncipherment, dataEncipherment
+extendedKeyUsage   = clientAuth
+subjectAltName     = @alt_names
+ 
+[ alt_names ]
+DNS.1              = localhost
+DNS.1              = backend-processor
+IP.1               = 127.0.0.1
+IP.2               = 0.0.0.0
