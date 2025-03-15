@@ -30,7 +30,7 @@ func TestCreateCryptoAddress(t *testing.T) {
 		})
 	})
 
-	t.Run("Should Return SQL Error (address dublication)", func(t *testing.T) {
+	t.Run("Should Return SQL Error (address duplication)", func(t *testing.T) {
 		test.RunInTransaction(t, dbConnPool, func(t *testing.T, tx pgx.Tx) {
 			ctx := context.Background()
 			q := db.New(tx)

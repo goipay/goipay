@@ -27,7 +27,7 @@ const (
 
 	InvoiceAmountBelow0ErrorMsg      string = "Invoice amount can't be below 0."
 	InvoiceErrorWhileHandlingMsg     string = "An error occurred while handling invoice."
-	InvoiceStreamSendingDataErrorMsg string = "An error occured while sending data."
+	InvoiceStreamSendingDataErrorMsg string = "An error occurred while sending data."
 	InvoiceStreamClosedErrorMsg      string = "Stream has been closed."
 )
 
