@@ -54,7 +54,7 @@ func (p *PaymentProcessor) loadPersistedPendingInvoices() error {
 
 	tx.Commit(p.ctx)
 
-	// TODO: Add impelmentation for TON
+	// TODO: Add implementation for TON
 	for i := 0; i < len(invoices); i++ {
 		for _, cp := range p.cryptoProcessors {
 			if cp.supportsCoin(invoices[i].Coin) {
@@ -108,7 +108,7 @@ func (p *PaymentProcessor) load() error {
 }
 
 func (p *PaymentProcessor) HandleNewInvoice(req *dto.NewInvoiceRequest) (*db.Invoice, error) {
-	// TODO: Add impelmentation for TON
+	// TODO: Add implementation for TON
 	for _, cp := range p.cryptoProcessors {
 		if cp.supportsCoin(req.Coin) {
 			return cp.handleInvoicePbReq(p.ctx, req)
