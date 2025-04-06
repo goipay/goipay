@@ -214,7 +214,7 @@ func TestSimpleRegisterUser(t *testing.T) {
 		assert.Equal(t, res3.PaymentId, r.Invoice.Id)
 		assert.Equal(t, pb_v1.InvoiceStatusType_PENDING_MEMPOOL, r.Invoice.Status)
 	case e := <-invoiceStatusStreamErrCn:
-		log.Err(e).Msg("Step #6 - An error occured")
+		log.Err(e).Msg("Step #6 - An error occurred")
 		assert.FailNow(t, "")
 	case <-time.After(expiresAt.Sub(time.Now().UTC())):
 		log.Err(nil).Msg("Step #6 - Timeout has been expired")
@@ -231,7 +231,7 @@ func TestSimpleRegisterUser(t *testing.T) {
 		assert.Equal(t, r.Invoice.Id, res3.PaymentId)
 		assert.Equal(t, pb_v1.InvoiceStatusType_CONFIRMED, r.Invoice.Status)
 	case e := <-invoiceStatusStreamErrCn:
-		log.Err(e).Msg("Step #7 - An error occured")
+		log.Err(e).Msg("Step #7 - An error occurred")
 		assert.FailNow(t, "")
 	case <-time.After(expiresAt.Sub(time.Now().UTC())):
 		log.Err(nil).Msg("Step #7 - Timeout has been expired")
