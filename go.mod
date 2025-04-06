@@ -12,7 +12,7 @@ require (
 	github.com/docker/go-connections v0.5.0
 	github.com/ethereum/go-ethereum v1.15.7
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.7.2
+	github.com/jackc/pgx/v5 v5.7.4
 	github.com/ltcsuite/ltcd v0.23.5
 	github.com/ltcsuite/ltcd/ltcutil v1.1.3
 	github.com/rs/zerolog v1.34.0
