@@ -1,6 +1,7 @@
 module github.com/chekist32/goipay
 
 go 1.23.0
+
 toolchain go1.24.2
 
 require (
@@ -10,7 +11,7 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/chekist32/go-monero v0.2.4
 	github.com/docker/go-connections v0.5.0
-	github.com/ethereum/go-ethereum v1.15.7
+	github.com/ethereum/go-ethereum v1.15.8
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/ltcsuite/ltcd v0.23.5
