@@ -1,6 +1,7 @@
 module github.com/chekist32/goipay
 
 go 1.23.0
+
 toolchain go1.24.2
 
 require (
@@ -13,8 +14,8 @@ require (
 	github.com/ethereum/go-ethereum v1.15.7
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.4
-	github.com/ltcsuite/ltcd v0.23.5
-	github.com/ltcsuite/ltcd/ltcutil v1.1.3
+	github.com/ltcsuite/ltcd v0.23.6-0.20250505084124-c37ac1524e04
+	github.com/ltcsuite/ltcd/ltcutil v1.1.4
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.36.0
@@ -69,6 +70,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/ltcsuite/ltcd/btcec/v2 v2.3.2 // indirect
 	github.com/ltcsuite/ltcd/chaincfg/chainhash v1.0.2 // indirect
+	github.com/ltcsuite/secp256k1 v0.1.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
