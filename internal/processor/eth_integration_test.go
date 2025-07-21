@@ -11,6 +11,7 @@ import (
 	"github.com/chekist32/goipay/internal/db"
 	"github.com/chekist32/goipay/internal/listener"
 	"github.com/chekist32/goipay/test"
+	test_db "github.com/chekist32/goipay/test/db"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -83,9 +84,10 @@ func TestGenerateNextEthAddressHandler(t *testing.T) {
 			test.RunInTransaction(t, dbConn, func(t *testing.T, tx pgx.Tx) {
 				// Given
 				q := db.New(dbConn).WithTx(tx)
+				qT := test_db.New(dbConn).WithTx(tx)
 				userId, cd, _ := createUserWithEthData(ctx, q)
 
-				_, err := q.UpdateIndicesETHCryptoDataById(ctx, db.UpdateIndicesETHCryptoDataByIdParams{ID: cd.EthID, LastMajorIndex: d.prevMajorIndex, LastMinorIndex: d.prevMinorIndex})
+				_, err := qT.UpdateIndicesETHCryptoDataById(ctx, test_db.UpdateIndicesETHCryptoDataByIdParams{ID: cd.EthID, LastMajorIndex: d.prevMajorIndex, LastMinorIndex: d.prevMinorIndex})
 				if err != nil {
 					log.Fatal(err)
 				}
