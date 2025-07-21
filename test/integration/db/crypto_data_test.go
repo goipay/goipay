@@ -3,10 +3,12 @@ package db_test
 import (
 	"context"
 	"log"
+	"math"
 	"testing"
 
 	"github.com/chekist32/goipay/internal/db"
 	"github.com/chekist32/goipay/test"
+	test_db "github.com/chekist32/goipay/test/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -179,7 +181,7 @@ func TestFindCryptoDataByUserId(t *testing.T) {
 	})
 }
 
-func TestFindKeysAndLockXMRCryptoDataById(t *testing.T) {
+func TestFindKeysXMRCryptoDataById(t *testing.T) {
 	t.Run("Should Return Proper XMR Crypto Data", func(t *testing.T) {
 		test.RunInTransaction(t, dbConnPool, func(t *testing.T, tx pgx.Tx) {
 			ctx := context.Background()
@@ -198,7 +200,7 @@ func TestFindKeysAndLockXMRCryptoDataById(t *testing.T) {
 				log.Fatal(err)
 			}
 
-			keys, err := q.FindKeysAndLockXMRCryptoDataById(ctx, expectedCryptoData.XmrID)
+			keys, err := q.FindKeysXMRCryptoDataById(ctx, expectedCryptoData.XmrID)
 			assert.NoError(t, err)
 			assert.Equal(t, xmr.PrivViewKey, keys.PrivViewKey)
 			assert.Equal(t, xmr.PubSpendKey, keys.PubSpendKey)
@@ -227,7 +229,7 @@ func TestFindKeysAndLockXMRCryptoDataById(t *testing.T) {
 				log.Fatal(err)
 			}
 
-			_, err = q.FindKeysAndLockXMRCryptoDataById(ctx, xmrId)
+			_, err = q.FindKeysXMRCryptoDataById(ctx, xmrId)
 			assert.ErrorIs(t, err, pgx.ErrNoRows)
 		})
 	})
@@ -254,65 +256,71 @@ func TestFindKeysAndLockXMRCryptoDataById(t *testing.T) {
 				log.Fatal(err)
 			}
 
-			_, err = q.FindKeysAndLockXMRCryptoDataById(ctx, xmrId)
+			_, err = q.FindKeysXMRCryptoDataById(ctx, xmrId)
 			assert.ErrorIs(t, err, pgx.ErrNoRows)
 		})
 	})
 
 }
 
-func TestFindIndicesAndLockXMRCryptoDataById(t *testing.T) {
-	t.Run("Should Return Valid XMR Indices", func(t *testing.T) {
-		test.RunInTransaction(t, dbConnPool, func(t *testing.T, tx pgx.Tx) {
-			ctx := context.Background()
-			q := db.New(tx)
+func TestFindKeysAndIncrementedIndicesXMRCryptoDataById(t *testing.T) {
+	data := []struct {
+		prevMajorIndex     int32
+		prevMinorIndex     int32
+		expectedMajorIndex int32
+		expectedMinorIndex int32
+	}{
+		{
+			prevMajorIndex:     0,
+			prevMinorIndex:     0,
+			expectedMajorIndex: 0,
+			expectedMinorIndex: 1,
+		},
+		{
+			prevMajorIndex:     0,
+			prevMinorIndex:     124,
+			expectedMajorIndex: 0,
+			expectedMinorIndex: 125,
+		},
+		{
+			prevMajorIndex:     0,
+			prevMinorIndex:     math.MaxInt32,
+			expectedMajorIndex: 1,
+			expectedMinorIndex: 0,
+		},
+		{
+			prevMajorIndex:     1,
+			prevMinorIndex:     2,
+			expectedMajorIndex: 1,
+			expectedMinorIndex: 3,
+		},
+	}
 
-			xmr, err := createRandomXMRCryptoData(ctx, q)
-			if err != nil {
-				log.Fatal(err)
-			}
+	for _, v := range data {
+		t.Run("Should Return Properly Incremented Indices", func(t *testing.T) {
+			test.RunInTransaction(t, dbConnPool, func(t *testing.T, tx pgx.Tx) {
+				ctx := context.Background()
+				q := db.New(tx)
+				qT := test_db.New(tx)
 
-			indices, err := q.FindIndicesAndLockXMRCryptoDataById(ctx, xmr.ID)
-			assert.NoError(t, err)
-			assert.Equal(t, xmr.LastMajorIndex, indices.LastMajorIndex)
-			assert.Equal(t, xmr.LastMinorIndex, indices.LastMinorIndex)
+				xmr, err := createRandomXMRCryptoData(ctx, q)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				_, err = qT.UpdateIndicesXMRCryptoDataById(ctx, test_db.UpdateIndicesXMRCryptoDataByIdParams{ID: xmr.ID, LastMajorIndex: v.prevMajorIndex, LastMinorIndex: v.prevMinorIndex})
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				keysAndIndices, err := q.FindKeysAndIncrementedIndicesXMRCryptoDataById(ctx, xmr.ID)
+				assert.NoError(t, err)
+				assert.Equal(t, v.expectedMajorIndex, keysAndIndices.LastMajorIndex)
+				assert.Equal(t, v.expectedMinorIndex, keysAndIndices.LastMinorIndex)
+			})
 		})
-	})
+	}
 
-	t.Run("Should Return SQL Error (no rows)", func(t *testing.T) {
-		test.RunInTransaction(t, dbConnPool, func(t *testing.T, tx pgx.Tx) {
-			ctx := context.Background()
-			q := db.New(tx)
-
-			_, err := createRandomXMRCryptoData(ctx, q)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			var xmrId pgtype.UUID
-			if err := xmrId.Scan(uuid.NewString()); err != nil {
-				log.Fatal(err)
-			}
-
-			_, err = q.FindIndicesAndLockXMRCryptoDataById(ctx, xmrId)
-			assert.ErrorIs(t, err, pgx.ErrNoRows)
-		})
-	})
-}
-
-func TestUpdateIndicesXMRCryptoDataById(t *testing.T) {
-	test.RunInTransaction(t, dbConnPool, func(t *testing.T, tx pgx.Tx) {
-		ctx := context.Background()
-		q := db.New(tx)
-
-		xmr, err := createRandomXMRCryptoData(ctx, q)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		_, err = q.UpdateIndicesXMRCryptoDataById(ctx, db.UpdateIndicesXMRCryptoDataByIdParams{ID: xmr.ID, LastMajorIndex: 1, LastMinorIndex: 1})
-		assert.NoError(t, err)
-	})
 }
 
 func TestUpdateKeysXMRCryptoDataById(t *testing.T) {
