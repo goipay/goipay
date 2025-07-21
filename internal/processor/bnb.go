@@ -26,28 +26,18 @@ func generateNextBNBAddressHandler(ctx context.Context, q *db.Queries, data *gen
 		return addr, err
 	}
 
-	indices, err := q.FindIndicesAndLockBNBCryptoDataById(ctx, cd.BnbID)
+	keysAndIndices, err := q.FindKeysAndIncrementedIndicesBNBCryptoDataById(ctx, cd.BnbID)
 	if err != nil {
 		return addr, err
 	}
 
-	mPubStr, err := q.FindKeysAndLockBNBCryptoDataById(ctx, cd.BnbID)
-	if err != nil {
-		return addr, err
-	}
-
-	i := db.FindIndicesAndLockETHCryptoDataByIdRow(indices)
-	pubKey, err := deriveNextETHBasedECPubKeyHelper(&i, mPubStr)
+	pubKey, err := deriveNextETHBasedECPubKeyHelper(indices{major: uint32(keysAndIndices.LastMajorIndex), minor: uint32(keysAndIndices.LastMinorIndex)}, keysAndIndices.MasterPubKey)
 	if err != nil {
 		return addr, err
 	}
 
 	addr, err = q.CreateCryptoAddress(ctx, db.CreateCryptoAddressParams{Address: crypto.PubkeyToAddress(*pubKey.ToECDSA()).Hex(), Coin: db.CoinTypeBNB, IsOccupied: true, UserID: data.userId})
 	if err != nil {
-		return addr, err
-	}
-
-	if _, err := q.UpdateIndicesBNBCryptoDataById(ctx, db.UpdateIndicesBNBCryptoDataByIdParams{ID: cd.BnbID, LastMajorIndex: i.LastMajorIndex, LastMinorIndex: i.LastMinorIndex}); err != nil {
 		return addr, err
 	}
 

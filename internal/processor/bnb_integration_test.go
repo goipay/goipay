@@ -11,6 +11,7 @@ import (
 	"github.com/chekist32/goipay/internal/db"
 	"github.com/chekist32/goipay/internal/listener"
 	"github.com/chekist32/goipay/test"
+	test_db "github.com/chekist32/goipay/test/db"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -67,9 +68,10 @@ func TestGenerateNextBnbAddressHandler(t *testing.T) {
 			test.RunInTransaction(t, dbConn, func(t *testing.T, tx pgx.Tx) {
 				// Given
 				q := db.New(dbConn).WithTx(tx)
+				qT := test_db.New(dbConn).WithTx(tx)
 				userId, cd, _ := createUserWithBnbData(ctx, q)
 
-				_, err := q.UpdateIndicesBNBCryptoDataById(ctx, db.UpdateIndicesBNBCryptoDataByIdParams{ID: cd.BnbID, LastMajorIndex: d.prevMajorIndex, LastMinorIndex: d.prevMinorIndex})
+				_, err := qT.UpdateIndicesBNBCryptoDataById(ctx, test_db.UpdateIndicesBNBCryptoDataByIdParams{ID: cd.BnbID, LastMajorIndex: d.prevMajorIndex, LastMinorIndex: d.prevMinorIndex})
 				if err != nil {
 					log.Fatal(err)
 				}
