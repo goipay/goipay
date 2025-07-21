@@ -17,3 +17,10 @@ SET last_major_index = $2,
     last_minor_index = $3
 WHERE id = $1
 RETURNING *;
+
+-- name: UpdateIndicesLTCCryptoDataById :one
+UPDATE ltc_crypto_data
+SET last_major_index = $2,
+    last_minor_index = $3
+WHERE id = $1
+RETURNING *;
