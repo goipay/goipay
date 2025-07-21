@@ -59,11 +59,11 @@ RETURNING *;
 -- name: FindKeysAndIncrementedIndicesXMRCryptoDataById :one
 UPDATE xmr_crypto_data
 SET last_minor_index = CASE 
-        WHEN last_minor_index >= (1 << 31) - 1 THEN 0
+        WHEN last_minor_index >= 2147483647 THEN 0
         ELSE last_minor_index + 1
     END,
     last_major_index = CASE 
-        WHEN last_minor_index >= (1 << 31) - 1 THEN last_major_index + 1
+        WHEN last_minor_index >= 2147483647 THEN last_major_index + 1
         ELSE last_major_index
     END
 WHERE id = $1
@@ -75,12 +75,6 @@ RETURNING priv_view_key, pub_spend_key, last_major_index, last_minor_index;
 INSERT INTO btc_crypto_data(master_pub_key) VALUES ($1)
 RETURNING *;
 
--- name: FindKeysAndLockBTCCryptoDataById :one
-SELECT master_pub_key
-FROM btc_crypto_data
-WHERE id = $1
-FOR SHARE;
-
 -- name: UpdateKeysBTCCryptoDataById :one
 UPDATE btc_crypto_data
 SET master_pub_key = $2,
@@ -89,18 +83,19 @@ SET master_pub_key = $2,
 WHERE id = $1
 RETURNING *;
 
--- name: FindIndicesAndLockBTCCryptoDataById :one
-SELECT last_major_index, last_minor_index 
-FROM btc_crypto_data
-WHERE id = $1
-FOR UPDATE;
-
--- name: UpdateIndicesBTCCryptoDataById :one
+-- name: FindKeysAndIncrementedIndicesBTCCryptoDataById :one
 UPDATE btc_crypto_data
-SET last_major_index = $2,
-    last_minor_index = $3
+SET last_minor_index = CASE 
+        WHEN last_minor_index >= 2147483647 THEN 0
+        ELSE last_minor_index + 1
+    END,
+    last_major_index = CASE 
+        WHEN last_minor_index >= 2147483647 THEN last_major_index + 1
+        ELSE last_major_index
+    END
 WHERE id = $1
-RETURNING *;
+RETURNING master_pub_key, last_major_index, last_minor_index;
+
 
 -- LTC
 -- name: CreateLTCCryptoData :one
