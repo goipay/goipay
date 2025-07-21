@@ -123,11 +123,11 @@ func deriveNextETHBasedECPubKeyHelper(indices indices, masterPubKey string) (*bt
 		return nil, err
 	}
 
-	majMPub, err := mPub.Derive(uint32(indices.major))
+	majMPub, err := mPub.Derive(indices.major)
 	if err != nil {
 		return nil, err
 	}
-	minMPub, err := majMPub.Derive(uint32(indices.minor))
+	minMPub, err := majMPub.Derive(indices.minor)
 	if err != nil {
 		return nil, err
 	}
