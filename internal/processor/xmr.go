@@ -24,7 +24,7 @@ func verifyXMRTxHandler(ctx context.Context, q *db.Queries, data *verifyTxHandle
 		return 0, err
 	}
 
-	xmrKeys, err := q.FindKeysAndLockXMRCryptoDataById(ctx, cryptoData.XmrID)
+	xmrKeys, err := q.FindKeysXMRCryptoDataById(ctx, cryptoData.XmrID)
 	if err != nil {
 		return 0, err
 	}
@@ -91,43 +91,28 @@ func generateNextXMRAddressHandler(ctx context.Context, q *db.Queries, data *gen
 		return addr, err
 	}
 
-	indices, err := q.FindIndicesAndLockXMRCryptoDataById(ctx, cd.XmrID)
+	keysIndicesData, err := q.FindKeysAndIncrementedIndicesXMRCryptoDataById(ctx, cd.XmrID)
 	if err != nil {
 		return addr, err
 	}
 
-	keys, err := q.FindKeysAndLockXMRCryptoDataById(ctx, cd.XmrID)
+	viewKey, err := utils.NewPrivateKey(keysIndicesData.PrivViewKey)
 	if err != nil {
 		return addr, err
 	}
 
-	viewKey, err := utils.NewPrivateKey(keys.PrivViewKey)
+	spendKey, err := utils.NewPublicKey(keysIndicesData.PubSpendKey)
 	if err != nil {
 		return addr, err
 	}
 
-	spendKey, err := utils.NewPublicKey(keys.PubSpendKey)
-	if err != nil {
-		return addr, err
-	}
-
-	indices.LastMinorIndex++
-	if indices.LastMinorIndex <= 0 {
-		indices.LastMinorIndex = 0
-		indices.LastMajorIndex++
-	}
-
-	subAddr, err := utils.GenerateSubaddress(viewKey, spendKey, uint32(indices.LastMajorIndex), uint32(indices.LastMinorIndex), net)
+	subAddr, err := utils.GenerateSubaddress(viewKey, spendKey, uint32(keysIndicesData.LastMajorIndex), uint32(keysIndicesData.LastMinorIndex), net)
 	if err != nil {
 		return addr, err
 	}
 
 	addr, err = q.CreateCryptoAddress(ctx, db.CreateCryptoAddressParams{Address: subAddr.Address(), Coin: db.CoinTypeXMR, IsOccupied: true, UserID: data.userId})
 	if err != nil {
-		return addr, err
-	}
-
-	if _, err := q.UpdateIndicesXMRCryptoDataById(ctx, db.UpdateIndicesXMRCryptoDataByIdParams{ID: cd.XmrID, LastMajorIndex: indices.LastMajorIndex, LastMinorIndex: indices.LastMinorIndex}); err != nil {
 		return addr, err
 	}
 

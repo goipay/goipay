@@ -25,27 +25,18 @@ func generateNextETHAddressHandler(ctx context.Context, q *db.Queries, data *gen
 		return addr, err
 	}
 
-	indices, err := q.FindIndicesAndLockETHCryptoDataById(ctx, cd.EthID)
+	keysAndIndices, err := q.FindKeysAndIncrementedIndicesETHCryptoDataById(ctx, cd.EthID)
 	if err != nil {
 		return addr, err
 	}
 
-	mPubStr, err := q.FindKeysAndLockETHCryptoDataById(ctx, cd.EthID)
-	if err != nil {
-		return addr, err
-	}
-
-	pubKey, err := deriveNextETHBasedECPubKeyHelper(&indices, mPubStr)
+	pubKey, err := deriveNextETHBasedECPubKeyHelper(indices{major: uint32(keysAndIndices.LastMajorIndex), minor: uint32(keysAndIndices.LastMinorIndex)}, keysAndIndices.MasterPubKey)
 	if err != nil {
 		return addr, err
 	}
 
 	addr, err = q.CreateCryptoAddress(ctx, db.CreateCryptoAddressParams{Address: crypto.PubkeyToAddress(*pubKey.ToECDSA()).Hex(), Coin: db.CoinTypeETH, IsOccupied: true, UserID: data.userId})
 	if err != nil {
-		return addr, err
-	}
-
-	if _, err := q.UpdateIndicesETHCryptoDataById(ctx, db.UpdateIndicesETHCryptoDataByIdParams{ID: cd.EthID, LastMajorIndex: indices.LastMajorIndex, LastMinorIndex: indices.LastMinorIndex}); err != nil {
 		return addr, err
 	}
 

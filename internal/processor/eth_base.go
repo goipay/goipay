@@ -20,6 +20,11 @@ type tokenData struct {
 	decimals        uint64
 }
 
+type indices struct {
+	major uint32
+	minor uint32
+}
+
 var (
 	tokenDataETHCompatible map[db.CoinType]map[db.CoinType]tokenData = map[db.CoinType]map[db.CoinType]tokenData{
 		// ERC20
@@ -112,23 +117,17 @@ func verifyETHBasedTxHandler(ctx context.Context, q *db.Queries, data *verifyTxH
 	return amount, nil
 }
 
-func deriveNextETHBasedECPubKeyHelper(indices *db.FindIndicesAndLockETHCryptoDataByIdRow, masterPubKey string) (*btcec.PublicKey, error) {
+func deriveNextETHBasedECPubKeyHelper(indices indices, masterPubKey string) (*btcec.PublicKey, error) {
 	mPub, err := hdkeychain.NewKeyFromString(masterPubKey)
 	if err != nil {
 		return nil, err
 	}
 
-	indices.LastMinorIndex++
-	if indices.LastMinorIndex <= 0 {
-		indices.LastMinorIndex = 0
-		indices.LastMajorIndex++
-	}
-
-	majMPub, err := mPub.Derive(uint32(indices.LastMajorIndex))
+	majMPub, err := mPub.Derive(indices.major)
 	if err != nil {
 		return nil, err
 	}
-	minMPub, err := majMPub.Derive(uint32(indices.LastMinorIndex))
+	minMPub, err := majMPub.Derive(indices.minor)
 	if err != nil {
 		return nil, err
 	}

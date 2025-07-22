@@ -12,6 +12,7 @@ import (
 	"github.com/chekist32/goipay/internal/db"
 	"github.com/chekist32/goipay/internal/listener"
 	"github.com/chekist32/goipay/test"
+	test_db "github.com/chekist32/goipay/test/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -90,9 +91,10 @@ func TestGenerateNextBtcAddressHandler(t *testing.T) {
 			test.RunInTransaction(t, dbConn, func(t *testing.T, tx pgx.Tx) {
 				// Given
 				q := db.New(dbConn).WithTx(tx)
+				qT := test_db.New(dbConn).WithTx(tx)
 				userId, cd, _ := createUserWithBtcData(ctx, q)
 
-				_, err := q.UpdateIndicesBTCCryptoDataById(ctx, db.UpdateIndicesBTCCryptoDataByIdParams{ID: cd.BtcID, LastMajorIndex: d.prevMajorIndex, LastMinorIndex: d.prevMinorIndex})
+				_, err := qT.UpdateIndicesBTCCryptoDataById(ctx, test_db.UpdateIndicesBTCCryptoDataByIdParams{ID: cd.BtcID, LastMajorIndex: d.prevMajorIndex, LastMinorIndex: d.prevMinorIndex})
 				if err != nil {
 					log.Fatal(err)
 				}

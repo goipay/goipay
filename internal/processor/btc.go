@@ -59,32 +59,21 @@ func generateNextBTCAddressHandler(ctx context.Context, q *db.Queries, data *gen
 		return addr, err
 	}
 
-	indices, err := q.FindIndicesAndLockBTCCryptoDataById(ctx, cd.BtcID)
+	keysAndIndices, err := q.FindKeysAndIncrementedIndicesBTCCryptoDataById(ctx, cd.BtcID)
 	if err != nil {
 		return addr, err
 	}
 
-	mPubStr, err := q.FindKeysAndLockBTCCryptoDataById(ctx, cd.BtcID)
+	mPub, err := hdkeychain.NewKeyFromString(keysAndIndices.MasterPubKey)
 	if err != nil {
 		return addr, err
 	}
 
-	mPub, err := hdkeychain.NewKeyFromString(mPubStr)
+	majMPub, err := mPub.Derive(uint32(keysAndIndices.LastMajorIndex))
 	if err != nil {
 		return addr, err
 	}
-
-	indices.LastMinorIndex++
-	if indices.LastMinorIndex <= 0 {
-		indices.LastMinorIndex = 0
-		indices.LastMajorIndex++
-	}
-
-	majMPub, err := mPub.Derive(uint32(indices.LastMajorIndex))
-	if err != nil {
-		return addr, err
-	}
-	minMPub, err := majMPub.Derive(uint32(indices.LastMinorIndex))
+	minMPub, err := majMPub.Derive(uint32(keysAndIndices.LastMinorIndex))
 	if err != nil {
 		return addr, err
 	}
@@ -102,10 +91,6 @@ func generateNextBTCAddressHandler(ctx context.Context, q *db.Queries, data *gen
 
 	addr, err = q.CreateCryptoAddress(ctx, db.CreateCryptoAddressParams{Address: newAddr.EncodeAddress(), Coin: db.CoinTypeBTC, IsOccupied: true, UserID: data.userId})
 	if err != nil {
-		return addr, err
-	}
-
-	if _, err := q.UpdateIndicesBTCCryptoDataById(ctx, db.UpdateIndicesBTCCryptoDataByIdParams{ID: cd.BtcID, LastMajorIndex: indices.LastMajorIndex, LastMinorIndex: indices.LastMinorIndex}); err != nil {
 		return addr, err
 	}
 

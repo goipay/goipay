@@ -14,6 +14,7 @@ import (
 	"github.com/chekist32/goipay/internal/db"
 	"github.com/chekist32/goipay/internal/listener"
 	"github.com/chekist32/goipay/test"
+	test_db "github.com/chekist32/goipay/test/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -91,9 +92,10 @@ func TestGenerateNextXmrAddressHandler(t *testing.T) {
 			test.RunInTransaction(t, dbConn, func(t *testing.T, tx pgx.Tx) {
 				// Given
 				q := db.New(dbConn).WithTx(tx)
+				qT := test_db.New(dbConn).WithTx(tx)
 				userId, cd, _ := createUserWithXmrData(ctx, q)
 
-				_, err := q.UpdateIndicesXMRCryptoDataById(ctx, db.UpdateIndicesXMRCryptoDataByIdParams{ID: cd.XmrID, LastMajorIndex: d.prevMajorIndex, LastMinorIndex: d.prevMinorIndex})
+				_, err := qT.UpdateIndicesXMRCryptoDataById(ctx, test_db.UpdateIndicesXMRCryptoDataByIdParams{ID: cd.XmrID, LastMajorIndex: d.prevMajorIndex, LastMinorIndex: d.prevMinorIndex})
 				if err != nil {
 					log.Fatal(err)
 				}
